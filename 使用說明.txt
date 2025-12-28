@@ -1,0 +1,2 @@
+cd C:\Users\mark7\Documents\工作\程式設計\藥局營收管理工具
+streamlit run app.py
