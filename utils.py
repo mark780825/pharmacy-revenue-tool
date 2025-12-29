@@ -52,6 +52,9 @@ EXPENSE_CATEGORIES = {
         "停車費",
         "其他"
     ],
+    "軟硬體更新": [
+        "一般"
+    ],
     "帳戶類別": [ # This seems to be a list of accounts, but maybe User meant Bank fees? 
                   # Looking at image 1, it lists "帳戶類別" with "銀行", "現金" at the bottom.
                   # I will treat this as Account Types, not Expense Categories.
