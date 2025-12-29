@@ -61,7 +61,7 @@ with st.sidebar:
     if st.session_state['logged_in']:
 
         st.success(f"您好 {st.session_state['username']} ({st.session_state['role']})")
-        st.caption("v1.5 (Cloud Optimized)")
+        st.caption("v1.6 (Cloud Optimized)")
 
         if st.button("登出", type="secondary"):
 
@@ -152,65 +152,52 @@ if page == "每日 記帳 (Data Entry)":
     
 
     with col1:
-
         date = st.date_input("日期", datetime.now())
-
-        tx_type = st.radio("類型", ["收入", "支出"], horizontal=True)
-
+        tx_type = st.radio("類型", ["收入", "支出", "資金調度"], horizontal=True)
         
-
         if tx_type == "收入":
-
             main_cat = st.selectbox("主類別", list(utils.INCOME_CATEGORIES.keys()))
-
             sub_cat_options = list(utils.INCOME_CATEGORIES[main_cat].keys())
-
             sub_cat = st.selectbox("子類別", sub_cat_options)
-
-        else:
-
+            account_from = None
+        elif tx_type == "支出":
             # Expense
-
-            # Filter out keys that are not actual expense categories if needed, but Utils definition is clean.
-
-            # Except "帳戶類別" key in utils might need handling if I added it there incorrectly. 
-
-            # I will filter it out just in case.
-
             expense_cats = [k for k in utils.EXPENSE_CATEGORIES.keys() if k != "帳戶類別"]
-
             main_cat = st.selectbox("主科目", expense_cats)
-
             sub_cat_options = utils.EXPENSE_CATEGORIES.get(main_cat, [])
-
             if sub_cat_options:
-
                 sub_cat = st.selectbox("子類別", sub_cat_options)
-
             else:
-
                 sub_cat = None
-
-
+            account_from = None
+        else:
+            # 資金調度 (Transfer)
+            st.info("ℹ️ 資金調度：僅調整帳戶餘額，不影響損益計算。")
+            main_cat = "資金調度"
+            sub_cat = ""
+            
+            # Show "From" Account here in Col 1
+            account_options = utils.ACCOUNT_TYPES
+            account_from = st.selectbox("轉出帳戶 (From)", account_options, key="acc_from")
 
     with col2:
-
-        # Filter account types based on role
-
         account_options = utils.ACCOUNT_TYPES
-
-        if st.session_state['role'] != 'admin':
-
-            # Non-admin users can only select Cash
-
-            account_options = ["現金"]
-
-            
-
-        account = st.selectbox("帳戶", account_options)
+        
+        if tx_type == "資金調度":
+             # Show "To" Account
+             # remove the 'from' account from options to avoid self-transfer?
+             to_options = [x for x in account_options if x != account_from]
+             account = st.selectbox("轉入帳戶 (To)", to_options, key="acc_to")
+             
+        else:
+            # Normal Income/Expense Account Selection
+            if st.session_state['role'] != 'admin':
+                # Non-admin users can only select Cash
+                account_options = ["現金"]
+                
+            account = st.selectbox("帳戶", account_options)
 
         amount = st.number_input("金額 (TWD)", min_value=0, step=1)
-
         note = st.text_input("備註")
 
 
