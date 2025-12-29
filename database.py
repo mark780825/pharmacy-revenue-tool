@@ -164,6 +164,13 @@ def get_transactions(start_date=None, end_date=None):
     # Convert date column to datetime
     df['date'] = pd.to_datetime(df['date'])
     
+    # Enforce numeric types for amount columns
+    # Coerce errors (non-numeric) to NaN, then fill with 0
+    if 'amount' in df.columns:
+        df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0.0)
+    if 'original_amount' in df.columns:
+        df['original_amount'] = pd.to_numeric(df['original_amount'], errors='coerce').fillna(0.0)
+    
     # Normalize inputs to date objects if they are datetime
     if start_date and isinstance(start_date, datetime):
         start_date = start_date.date()
