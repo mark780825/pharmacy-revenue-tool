@@ -5,6 +5,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 import streamlit as st
 import toml
 import os
+import time
 
 # Constants
 SHEET_URL_KEY = "spreadsheet"
@@ -50,12 +51,23 @@ def get_client():
 
 @st.cache_resource(ttl=3600)
 def get_spreadsheet():
-    """Open and return the spreadsheet object."""
-    client = get_client()
-    sheet_url, _ = get_config()
-    if not sheet_url:
-         raise ValueError("Sheet URL not found. Please configure .streamlit/secrets.toml")
-    return client.open_by_url(sheet_url)
+    """Open and return the spreadsheet object with retry logic."""
+    # Simple retry mechanism
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            client = get_client()
+            sheet_url, _ = get_config()
+            if not sheet_url:
+                 raise ValueError("Sheet URL not found. Please configure .streamlit/secrets.toml")
+            return client.open_by_url(sheet_url)
+        except gspread.exceptions.APIError as e:
+            if attempt < max_retries - 1:
+                time.sleep(2 * (attempt + 1)) # Backoff
+                continue
+            raise e
+        except Exception as e:
+            raise e
 
 def get_worksheet(name):
     """Get a specific worksheet, create if not exists."""

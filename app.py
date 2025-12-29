@@ -61,6 +61,7 @@ with st.sidebar:
     if st.session_state['logged_in']:
 
         st.success(f"您好 {st.session_state['username']} ({st.session_state['role']})")
+        st.caption("v1.5 (Cloud Optimized)")
 
         if st.button("登出", type="secondary"):
 
