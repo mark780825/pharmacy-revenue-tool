@@ -48,6 +48,7 @@ def get_client():
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     return gspread.authorize(creds)
 
+@st.cache_resource(ttl=3600)
 def get_spreadsheet():
     """Open and return the spreadsheet object."""
     client = get_client()
