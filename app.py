@@ -275,27 +275,46 @@ if page == "每日 記帳 (Data Entry)":
 
         if amount > 0:
 
-            db.add_transaction(
-
-                date=date,
-
-                type=tx_type,
-
-                category=main_cat,
-
-                subcategory=sub_cat if sub_cat else "",
-
-                account=account,
-
-                amount=net_amount,
-
-                original_amount=amount if is_adjusted else None,
-
-                note=note,
-
-                nhi_month=nhi_selected_month_str
-
-            )
+            if tx_type == "資金調度":
+                # Create TWO transactions for transfer
+                # 1. Transfer Out
+                db.add_transaction(
+                    date=date,
+                    type="資金調度",
+                    category="轉出",
+                    subcategory="",
+                    account=account_from,
+                    amount=amount,
+                    original_amount=None,
+                    note=f"{note} (轉入 {account})",
+                    nhi_month=""
+                )
+                # 2. Transfer In
+                db.add_transaction(
+                    date=date,
+                    type="資金調度",
+                    category="轉入",
+                    subcategory="",
+                    account=account, # This is 'account_to' from UI
+                    amount=amount,
+                    original_amount=None,
+                    note=f"{note} (來自 {account_from})",
+                    nhi_month=""
+                )
+                
+            else:
+                # Normal Transaction
+                db.add_transaction(
+                    date=date,
+                    type=tx_type,
+                    category=main_cat,
+                    subcategory=sub_cat if sub_cat else "",
+                    account=account,
+                    amount=net_amount,
+                    original_amount=amount if is_adjusted else None,
+                    note=note,
+                    nhi_month=nhi_selected_month_str
+                )
 
             st.success("紀錄已新增")
 
@@ -613,8 +632,18 @@ elif page == "每月 結算 (Monthly Closing)":
         flow_cash += df_month[(df_month['type']=='收入') & (df_month['account']=='現金')]['amount'].sum()
 
         # Cash Expense
-
         flow_cash -= df_month[(df_month['type']=='支出') & (df_month['account']=='現金')]['amount'].sum()
+        
+        # Transfers (Adjust Balances)
+        # Bank Transfer In
+        flow_bank += df_month[(df_month['type']=='資金調度') & (df_month['category']=='轉入') & (df_month['account']=='銀行')]['amount'].sum()
+        # Bank Transfer Out
+        flow_bank -= df_month[(df_month['type']=='資金調度') & (df_month['category']=='轉出') & (df_month['account']=='銀行')]['amount'].sum()
+        
+        # Cash Transfer In
+        flow_cash += df_month[(df_month['type']=='資金調度') & (df_month['category']=='轉入') & (df_month['account']=='現金')]['amount'].sum()
+        # Cash Transfer Out
+        flow_cash -= df_month[(df_month['type']=='資金調度') & (df_month['category']=='轉出') & (df_month['account']=='現金')]['amount'].sum()
 
     
 
