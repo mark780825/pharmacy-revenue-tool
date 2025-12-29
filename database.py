@@ -6,10 +6,19 @@ import streamlit as st
 import toml
 import os
 import time
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # Constants
 SHEET_URL_KEY = "spreadsheet"
 SECRETS_PATH = ".streamlit/secrets.toml"
+
+# Define a standard retry strategy for API calls
+# Wait 2^x * 1 second between retries, up to 10 seconds, max 5 attempts
+api_retry = retry(
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type((gspread.exceptions.APIError, gspread.exceptions.GSpreadException))
+)
 
 def get_config():
     """
@@ -50,25 +59,16 @@ def get_client():
     return gspread.authorize(creds)
 
 @st.cache_resource(ttl=3600)
+@api_retry
 def get_spreadsheet():
     """Open and return the spreadsheet object with retry logic."""
-    # Simple retry mechanism
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            client = get_client()
-            sheet_url, _ = get_config()
-            if not sheet_url:
-                 raise ValueError("Sheet URL not found. Please configure .streamlit/secrets.toml")
-            return client.open_by_url(sheet_url)
-        except gspread.exceptions.APIError as e:
-            if attempt < max_retries - 1:
-                time.sleep(2 * (attempt + 1)) # Backoff
-                continue
-            raise e
-        except Exception as e:
-            raise e
+    client = get_client()
+    sheet_url, _ = get_config()
+    if not sheet_url:
+            raise ValueError("Sheet URL not found. Please configure .streamlit/secrets.toml")
+    return client.open_by_url(sheet_url)
 
+@api_retry
 def get_worksheet(name):
     """Get a specific worksheet, create if not exists."""
     sh = get_spreadsheet()
@@ -78,10 +78,12 @@ def get_worksheet(name):
         ws = sh.add_worksheet(title=name, rows=100, cols=20)
     return ws
 
+@st.cache_resource
 def init_db():
     """
     Initialize the Google Sheet with required worksheets and headers.
     Checks if sheets exist, creates them if not, and ensures headers are present.
+    Cached resource to run only once per session/container start.
     """
     sh = get_spreadsheet()
     
@@ -90,6 +92,9 @@ def init_db():
         ws_trans = sh.worksheet("transactions")
     except gspread.WorksheetNotFound:
         ws_trans = sh.add_worksheet("transactions", rows=1000, cols=10)
+    
+    # Wrap critical reads in try-except block inside init or rely on global retry if refactored.
+    # But for init_db, since it's cached, we want it to succeed eventually.
     
     curr_headers_trans = ws_trans.row_values(1)
     req_headers_trans = ["id", "date", "type", "category", "subcategory", "account", "amount", "original_amount", "note", "nhi_month"]
