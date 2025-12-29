@@ -147,6 +147,12 @@ def get_transactions(start_date=None, end_date=None):
     # Convert date column to datetime
     df['date'] = pd.to_datetime(df['date'])
     
+    # Normalize inputs to date objects if they are datetime
+    if start_date and isinstance(start_date, datetime):
+        start_date = start_date.date()
+    if end_date and isinstance(end_date, datetime):
+        end_date = end_date.date()
+    
     if start_date and end_date:
         mask = (df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)
         df = df.loc[mask]
