@@ -187,6 +187,7 @@ if page == "每日 記帳 (Data Entry)":
              # Show "To" Account
              # remove the 'from' account from options to avoid self-transfer?
              to_options = [x for x in account_options if x != account_from]
+             to_options.append("提出") # Add Withdraw option
              account = st.selectbox("轉入帳戶 (To)", to_options, key="acc_to")
              
         else:
@@ -263,8 +264,12 @@ if page == "每日 記帳 (Data Entry)":
         if amount > 0:
 
             if tx_type == "資金調度":
-                # Create TWO transactions for transfer
-                # 1. Transfer Out
+                # Create transactions for transfer
+                
+                # 1. Transfer Out (Always happens)
+                # Note logic: If withdrawal, note is just "Withdrawal". If internal transfer, note "Transfer to X".
+                note_out = f"{note} (提出)" if account == "提出" else f"{note} (轉入 {account})"
+                
                 db.add_transaction(
                     date=date,
                     type="資金調度",
@@ -273,21 +278,23 @@ if page == "每日 記帳 (Data Entry)":
                     account=account_from,
                     amount=amount,
                     original_amount=None,
-                    note=f"{note} (轉入 {account})",
+                    note=note_out,
                     nhi_month=""
                 )
-                # 2. Transfer In
-                db.add_transaction(
-                    date=date,
-                    type="資金調度",
-                    category="轉入",
-                    subcategory="",
-                    account=account, # This is 'account_to' from UI
-                    amount=amount,
-                    original_amount=None,
-                    note=f"{note} (來自 {account_from})",
-                    nhi_month=""
-                )
+                
+                # 2. Transfer In (Only if NOT '提出')
+                if account != "提出":
+                    db.add_transaction(
+                        date=date,
+                        type="資金調度",
+                        category="轉入",
+                        subcategory="",
+                        account=account, # This is 'account_to' from UI
+                        amount=amount,
+                        original_amount=None,
+                        note=f"{note} (來自 {account_from})",
+                        nhi_month=""
+                    )
                 
             else:
                 # Normal Transaction
