@@ -577,10 +577,42 @@ elif page == "一般帳務分析 (General Analysis)":
                     st.warning(f"⚠️ 注意：缺少以下月份的結算資料，分析結果可能不準確：{', '.join(missing)}")
                     
                 # Process Data
-                # We need to calculate Profit = (This Month Total) - (Prev Month Total)
+                # We need to calculate Profit = (This Month Total) - (Prev Month Total) - (Owner Injection)
                 df_closings['Total'] = df_closings['bank_actual'] + df_closings['cash_actual']
                 df_closings['Prev_Total'] = df_closings['Total'].shift(1)
-                df_closings['Net_Profit'] = df_closings['Total'] - df_closings['Prev_Total']
+                df_closings['Gross_Change'] = df_closings['Total'] - df_closings['Prev_Total']
+                
+                # Fetch Owner's Capital Injections for the period
+                # Construct exact dates for query
+                t_start_date = datetime(start_year, start_month, 1)
+                # End date: last day of end_month
+                if end_month == 12:
+                    t_end_date = datetime(end_year + 1, 1, 1) - pd.Timedelta(days=1)
+                else:
+                    t_end_date = datetime(end_year, end_month + 1, 1) - pd.Timedelta(days=1)
+                
+                df_tx = db.get_transactions(start_date=t_start_date, end_date=t_end_date)
+                
+                # Calculate monthly capital injection
+                if not df_tx.empty:
+                    # Filter for Capital Injection
+                    mask_cap = (df_tx['category'] == '業主資本') & (df_tx['subcategory'] == '一般投入')
+                    df_cap = df_tx[mask_cap].copy()
+                    
+                    if not df_cap.empty:
+                        df_cap['month'] = df_cap['date'].dt.strftime('%Y-%m')
+                        cap_sums = df_cap.groupby('month')['amount'].sum().reset_index()
+                        cap_sums.rename(columns={'amount': 'Capital_Injection'}, inplace=True)
+                        
+                        # Merge with closings
+                        df_closings = pd.merge(df_closings, cap_sums, on='month', how='left')
+                        df_closings['Capital_Injection'].fillna(0, inplace=True)
+                    else:
+                        df_closings['Capital_Injection'] = 0.0
+                else:
+                    df_closings['Capital_Injection'] = 0.0
+
+                df_closings['Net_Profit'] = df_closings['Gross_Change'] - df_closings['Capital_Injection']
                 
                 # Filter out the 'prev_month' row from display, only show target range
                 df_result = df_closings[df_closings['month'] >= start_str].copy()
@@ -590,7 +622,7 @@ elif page == "一般帳務分析 (General Analysis)":
                     # Logic: Sum of Net_Profit in the period
                     total_profit = df_result['Net_Profit'].sum()
                     
-                    st.metric(f"區間總獲利 ({start_str} ~ {end_str})", f"${total_profit:,.0f}", help="區間期末總資產 - 區間期初總資產")
+                    st.metric(f"區間總獲利 ({start_str} ~ {end_str})", f"${total_profit:,.0f}", help="區間期末總資產 - 區間期初總資產 - 業主投入資本")
                     st.divider()
                     
                     # Chart
@@ -602,14 +634,16 @@ elif page == "一般帳務分析 (General Analysis)":
                     
                     # Table
                     st.subheader("詳細數據")
-                    tbl = df_result[['month', 'Prev_Total', 'Total', 'Net_Profit']].copy()
-                    tbl.columns = ['月份', '期初餘額 (上期末)', '期末總資產', '本月獲利']
+                    tbl = df_result[['month', 'Prev_Total', 'Total', 'Gross_Change', 'Capital_Injection', 'Net_Profit']].copy()
+                    tbl.columns = ['月份', '期初餘額 (上期末)', '期末總資產', '資產增減', '扣除業主投入', '實際獲利']
                     
                     st.dataframe(tbl.style.format({
                         '期初餘額 (上期末)': '${:,.0f}', 
                         '期末總資產': '${:,.0f}', 
-                        '本月獲利': '${:,.0f}'
-                    }).applymap(lambda v: 'color: red;' if v < 0 else 'color: green;', subset=['本月獲利']), use_container_width=True)
+                        '資產增減': '${:,.0f}',
+                        '扣除業主投入': '${:,.0f}',
+                        '實際獲利': '${:,.0f}'
+                    }).applymap(lambda v: 'color: red;' if v < 0 else 'color: green;', subset=['實際獲利']), use_container_width=True)
                 else:
                     st.info("尚無目標月份的完整結算資料 (可能缺上個月的期末餘額)。")
 
