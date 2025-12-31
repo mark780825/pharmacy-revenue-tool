@@ -593,9 +593,11 @@ elif page == "一般帳務分析 (General Analysis)":
                 
                 df_tx = db.get_transactions(start_date=t_start_date, end_date=t_end_date)
                 
-                # Init columns
-                df_closings['Capital_Injection'] = 0.0
-                df_closings['Withdrawal'] = 0.0
+                # Init columns via mapping to ensure correct alignment without merge suffix issues
+                
+                # Default to 0.0
+                capital_series = pd.Series(0.0, index=df_closings['month'])
+                withdrawal_series = pd.Series(0.0, index=df_closings['month'])
 
                 if not df_tx.empty:
                     df_tx['month'] = df_tx['date'].dt.strftime('%Y-%m')
@@ -605,24 +607,23 @@ elif page == "一般帳務分析 (General Analysis)":
                     df_cap = df_tx[mask_cap].copy()
                     
                     if not df_cap.empty:
-                        cap_sums = df_cap.groupby('month')['amount'].sum().reset_index()
-                        cap_sums.rename(columns={'amount': 'Capital_Injection'}, inplace=True)
-                        df_closings = pd.merge(df_closings, cap_sums, on='month', how='left')
-                        df_closings['Capital_Injection'].fillna(0, inplace=True)
-                        
+                         # Group by month and sum
+                         cap_grouped = df_cap.groupby('month')['amount'].sum()
+                         # Align with df_closings['month']
+                         # We can use map.
+                         capital_series = df_closings['month'].map(cap_grouped).fillna(0.0)
+
                     # 2. Capital Withdrawal (資金調度 - 提出)
                     # Logic: Type="資金調度", Category="轉出", Note contains "(提出)"
                     mask_withdraw = (df_tx['type'] == '資金調度') & (df_tx['category'] == '轉出') & (df_tx['note'].str.contains(r'\(提出\)', na=False))
                     df_withdraw = df_tx[mask_withdraw].copy()
                     
                     if not df_withdraw.empty:
-                        withdraw_sums = df_withdraw.groupby('month')['amount'].sum().reset_index()
-                        withdraw_sums.rename(columns={'amount': 'Withdrawal'}, inplace=True)
-                        # Merge if not already merged (but duplicate keys handle automatically by update suffix? No, merge again)
-                        # Be careful with columns. 
-                        # We used 'left' merge on df_closings.
-                        df_closings = pd.merge(df_closings, withdraw_sums, on='month', how='left')
-                        df_closings['Withdrawal'].fillna(0, inplace=True)
+                        with_grouped = df_withdraw.groupby('month')['amount'].sum()
+                        withdrawal_series = df_closings['month'].map(with_grouped).fillna(0.0)
+                
+                df_closings['Capital_Injection'] = capital_series.values
+                df_closings['Withdrawal'] = withdrawal_series.values
 
                 # Net Profit = Gross Change - Capital Injection + Withdrawal
                 # (Gross Change = Total - Prev Total. Withdrawal reduces Total. So we add it back to neutralize.)
