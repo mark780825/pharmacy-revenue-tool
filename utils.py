@@ -79,7 +79,7 @@ def calculate_net_amount(category, subcategory, amount):
 # 使用者帳號 (Simple hardcoded users for now)
 USERS = {
     "admin": "admin123",
-    "staff": "staff123"
+    "P2": "P2"
 }
 
 def verify_user(username, password):
