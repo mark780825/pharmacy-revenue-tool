@@ -54,7 +54,8 @@ EXPENSE_CATEGORIES = {
         "其他"
     ],
     "軟硬體更新": [
-        "一般"
+        "一般",
+        "年度維護"
     ],
     "帳戶類別": [ # This seems to be a list of accounts, but maybe User meant Bank fees? 
                   # Looking at image 1, it lists "帳戶類別" with "銀行", "現金" at the bottom.
