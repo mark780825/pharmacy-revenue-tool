@@ -252,6 +252,27 @@ def get_closing(month):
         pass
     return None
 
+def get_closings_range(start_month, end_month):
+    """Retrieve monthly closings within a specific range (inclusive)."""
+    ws = get_worksheet("monthly_closings")
+    data = ws.get_all_records()
+    df = pd.DataFrame(data)
+    
+    if df.empty:
+        return df
+        
+    mask = (df['month'] >= start_month) & (df['month'] <= end_month)
+    df = df.loc[mask]
+    df = df.sort_values(by='month')
+    
+    # Ensure numeric columns
+    cols = ['bank_actual', 'cash_actual', 'bank_calc', 'cash_calc']
+    for c in cols:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0.0)
+            
+    return df
+
 def get_previous_closing(current_month_str):
     """Get the most recent closing record before the current month."""
     # This is harder in Sheets than SQL. Need to fetch all and sort.

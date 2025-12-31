@@ -385,135 +385,233 @@ elif page == "一般帳務分析 (General Analysis)":
 
     st.header("一般帳務分析")
 
-    
+    # Mode Selection
+    analysis_mode = st.radio(
+        "分析模式", 
+        ["帳務細目分析 (每一筆收支加總)", "實際月營收 (每月結算餘額比較)"], 
+        horizontal=True
+    )
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        start_date = st.date_input("開始日期", datetime(datetime.now().year, datetime.now().month, 1))
-
-    with col2:
-
-        end_date = st.date_input("結束日期", datetime.now())
-
-
-
-    if start_date <= end_date:
-
-        df = db.get_transactions(start_date=start_date, end_date=end_date)
-
+    if analysis_mode == "帳務細目分析 (每一筆收支加總)":
         
+        st.caption("加總此區間內每一筆「收入」與「支出」紀錄來計算損益。")
 
-        if not df.empty:
+        col1, col2 = st.columns(2)
 
-            # KPI Cards
-            # Exclude Owner's Equity
-            total_income = df[(df['type'] == '收入') & (df['category'] != '業主資本')]['amount'].sum()
+        with col1:
 
-            total_expense = df[df['type'] == '支出']['amount'].sum()
+            start_date = st.date_input("開始日期", datetime(datetime.now().year, datetime.now().month, 1))
 
-            net_profit = total_income - total_expense
+        with col2:
 
-            
+            end_date = st.date_input("結束日期", datetime.now())
 
-            kpi1, kpi2, kpi3 = st.columns(3)
 
-            kpi1.metric("總收入", f"${total_income:,.0f}")
 
-            kpi2.metric("總支出", f"${total_expense:,.0f}")
+        if start_date <= end_date:
 
-            kpi3.metric("淨利", f"${net_profit:,.0f}", delta_color="normal")
+            df = db.get_transactions(start_date=start_date, end_date=end_date)
 
             
 
-            st.divider()
+            if not df.empty:
 
-            
+                # KPI Cards
+                # Exclude Owner's Equity
+                total_income = df[(df['type'] == '收入') & (df['category'] != '業主資本')]['amount'].sum()
 
-            # Charts
+                total_expense = df[df['type'] == '支出']['amount'].sum()
 
-            c1, c2 = st.columns(2)
+                net_profit = total_income - total_expense
 
-            
+                
 
-            with c1:
+                kpi1, kpi2, kpi3 = st.columns(3)
 
-                st.subheader("收入分析 (依子科目)")
+                kpi1.metric("總收入", f"${total_income:,.0f}")
 
-                income_df = df[(df['type'] == '收入') & (df['category'] != '業主資本')]
+                kpi2.metric("總支出", f"${total_expense:,.0f}")
 
-                if not income_df.empty:
+                kpi3.metric("淨利", f"${net_profit:,.0f}", delta_color="normal")
 
-                    income_chart = income_df.groupby('subcategory')['amount'].sum()
+                
 
-                    st.bar_chart(income_chart)
+                st.divider()
 
-                else:
+                
 
-                    st.write("無收入資料")
+                # Charts
 
-            
+                c1, c2 = st.columns(2)
 
-            with c2:
+                
 
-                st.subheader("支出分析 (依主科目)")
+                with c1:
 
-                expense_df = df[df['type'] == '支出']
+                    st.subheader("收入分析 (依子科目)")
 
-                if not expense_df.empty:
+                    income_df = df[(df['type'] == '收入') & (df['category'] != '業主資本')]
 
-                    expense_chart = expense_df.groupby('category')['amount'].sum()
+                    if not income_df.empty:
 
-                    st.bar_chart(expense_chart)
+                        income_chart = income_df.groupby('subcategory')['amount'].sum()
 
-                else:
+                        st.bar_chart(income_chart)
 
-                    st.write("無支出資料")
+                    else:
 
+                        st.write("無收入資料")
 
+                
 
-            st.divider()
+                with c2:
 
-            st.subheader("詳細交易紀錄")
+                    st.subheader("支出分析 (依主科目)")
 
-            
+                    expense_df = df[df['type'] == '支出']
 
-            # Show dataframe with ID for reference
+                    if not expense_df.empty:
 
-            st.dataframe(df, use_container_width=True)
+                        expense_chart = expense_df.groupby('category')['amount'].sum()
 
+                        st.bar_chart(expense_chart)
 
+                    else:
 
-            # Export Button
-
-            csv = df.to_csv(index=False).encode('utf-8-sig')
-
-            st.download_button(
-
-                label="匯出 資料 (CSV)",
-
-                data=csv,
-
-                file_name=f'pharmacy_revenue_{start_date}_{end_date}.csv',
-
-                mime='text/csv',
-
-            )
+                        st.write("無支出資料")
 
 
 
+                st.divider()
+
+                st.subheader("詳細交易紀錄")
+
+                
+
+                # Show dataframe with ID for reference
+
+                st.dataframe(df, use_container_width=True)
 
 
 
+                # Export Button
 
+                csv = df.to_csv(index=False).encode('utf-8-sig')
+
+                st.download_button(
+
+                    label="匯出 資料 (CSV)",
+
+                    data=csv,
+
+                    file_name=f'pharmacy_revenue_{start_date}_{end_date}.csv',
+
+                    mime='text/csv',
+
+                )
+
+            else:
+
+                st.info("此日期區間無資料")
         else:
-
-            st.info("此日期區間無資料")
+             st.error("開始日期不能晚於結束日期")
 
     else:
-
-        st.error("帳號或密碼錯誤")
+        # Actual Monthly Revenue Mode
+        st.subheader("實際月營收分析")
+        st.caption("透過比較「每月結算」的期末餘額，計算實際現金流增減。可檢視包含資金調度等所有影響後的最終獲利。")
+        
+        # Date Selection (Year/Month Range)
+        c1, c2, c3, c4 = st.columns(4)
+        today = datetime.now()
+        year_opts = list(range(today.year - 3, today.year + 2))
+        month_opts = list(range(1, 13))
+        
+        with c1:
+            start_year = st.selectbox("開始年份", year_opts, index=year_opts.index(today.year), key="mr_sy")
+        with c2:
+            start_month = st.selectbox("開始月份", month_opts, index=0, key="mr_sm")
+        with c3:
+            end_year = st.selectbox("結束年份", year_opts, index=year_opts.index(today.year), key="mr_ey")
+        with c4:
+            end_month = st.selectbox("結束月份", month_opts, index=today.month-1, key="mr_em")
+            
+        start_str = f"{start_year}-{start_month:02d}"
+        end_str = f"{end_year}-{end_month:02d}"
+        
+        if start_str > end_str:
+            st.error("開始月份不能晚於結束月份")
+        else:
+            # Logic: We need Closing of (Start Month - 1) as "Opening Balance"
+            # And Closings of all months in range.
+            
+            # Calculate Previous Month
+            start_date_obj = datetime(start_year, start_month, 1)
+            prev_month_date = start_date_obj - pd.Timedelta(days=1)
+            prev_month_str = prev_month_date.strftime("%Y-%m")
+            
+            # Fetch all closings from prev_month to end_month
+            df_closings = db.get_closings_range(prev_month_str, end_str)
+            
+            if df_closings.empty:
+                st.warning("在此區間內找不到任何結算資料。請確認是否已至「每月 結算」功能執行結帳。")
+            else:
+                # Check for missing months
+                # Generate expected list (inclusive of prev_month for calculation basis)
+                expected_months = []
+                curr = prev_month_date.replace(day=1) # Start from prev month
+                end_date_obj = datetime(end_year, end_month, 1)
+                
+                while curr <= end_date_obj:
+                    expected_months.append(curr.strftime("%Y-%m"))
+                    # Next month
+                    if curr.month == 12:
+                        curr = datetime(curr.year + 1, 1, 1)
+                    else:
+                        curr = datetime(curr.year, curr.month + 1, 1)
+                        
+                found_months = df_closings['month'].tolist()
+                missing = [m for m in expected_months if m not in found_months]
+                
+                if missing:
+                    st.warning(f"⚠️ 注意：缺少以下月份的結算資料，分析結果可能不準確：{', '.join(missing)}")
+                    
+                # Process Data
+                # We need to calculate Profit = (This Month Total) - (Prev Month Total)
+                df_closings['Total'] = df_closings['bank_actual'] + df_closings['cash_actual']
+                df_closings['Prev_Total'] = df_closings['Total'].shift(1)
+                df_closings['Net_Profit'] = df_closings['Total'] - df_closings['Prev_Total']
+                
+                # Filter out the 'prev_month' row from display, only show target range
+                df_result = df_closings[df_closings['month'] >= start_str].copy()
+                
+                if not df_result.empty:
+                    # Total Period Profit
+                    # Logic: Sum of Net_Profit in the period
+                    total_profit = df_result['Net_Profit'].sum()
+                    
+                    st.metric(f"區間總獲利 ({start_str} ~ {end_str})", f"${total_profit:,.0f}", help="區間期末總資產 - 區間期初總資產")
+                    st.divider()
+                    
+                    # Chart
+                    st.subheader("每月獲利趨勢")
+                    if not df_result['Net_Profit'].isna().all():
+                        st.bar_chart(df_result.set_index('month')['Net_Profit'])
+                    else:
+                        st.info("無法產生圖表 (資料不足)")
+                    
+                    # Table
+                    st.subheader("詳細數據")
+                    tbl = df_result[['month', 'Prev_Total', 'Total', 'Net_Profit']].copy()
+                    tbl.columns = ['月份', '期初餘額 (上期末)', '期末總資產', '本月獲利']
+                    
+                    st.dataframe(tbl.style.format({
+                        '期初餘額 (上期末)': '${:,.0f}', 
+                        '期末總資產': '${:,.0f}', 
+                        '本月獲利': '${:,.0f}'
+                    }).applymap(lambda v: 'color: red;' if v < 0 else 'color: green;', subset=['本月獲利']), use_container_width=True)
+                else:
+                    st.info("尚無目標月份的完整結算資料 (可能缺上個月的期末餘額)。")
 
 
 
