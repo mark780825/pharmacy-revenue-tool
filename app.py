@@ -593,26 +593,40 @@ elif page == "一般帳務分析 (General Analysis)":
                 
                 df_tx = db.get_transactions(start_date=t_start_date, end_date=t_end_date)
                 
-                # Calculate monthly capital injection
+                # Init columns
+                df_closings['Capital_Injection'] = 0.0
+                df_closings['Withdrawal'] = 0.0
+
                 if not df_tx.empty:
-                    # Filter for Capital Injection
+                    df_tx['month'] = df_tx['date'].dt.strftime('%Y-%m')
+
+                    # 1. Capital Injection (Owner)
                     mask_cap = (df_tx['category'] == '業主資本') & (df_tx['subcategory'] == '一般投入')
                     df_cap = df_tx[mask_cap].copy()
                     
                     if not df_cap.empty:
-                        df_cap['month'] = df_cap['date'].dt.strftime('%Y-%m')
                         cap_sums = df_cap.groupby('month')['amount'].sum().reset_index()
                         cap_sums.rename(columns={'amount': 'Capital_Injection'}, inplace=True)
-                        
-                        # Merge with closings
                         df_closings = pd.merge(df_closings, cap_sums, on='month', how='left')
                         df_closings['Capital_Injection'].fillna(0, inplace=True)
-                    else:
-                        df_closings['Capital_Injection'] = 0.0
-                else:
-                    df_closings['Capital_Injection'] = 0.0
+                        
+                    # 2. Capital Withdrawal (資金調度 - 提出)
+                    # Logic: Type="資金調度", Category="轉出", Note contains "(提出)"
+                    mask_withdraw = (df_tx['type'] == '資金調度') & (df_tx['category'] == '轉出') & (df_tx['note'].str.contains(r'\(提出\)', na=False))
+                    df_withdraw = df_tx[mask_withdraw].copy()
+                    
+                    if not df_withdraw.empty:
+                        withdraw_sums = df_withdraw.groupby('month')['amount'].sum().reset_index()
+                        withdraw_sums.rename(columns={'amount': 'Withdrawal'}, inplace=True)
+                        # Merge if not already merged (but duplicate keys handle automatically by update suffix? No, merge again)
+                        # Be careful with columns. 
+                        # We used 'left' merge on df_closings.
+                        df_closings = pd.merge(df_closings, withdraw_sums, on='month', how='left')
+                        df_closings['Withdrawal'].fillna(0, inplace=True)
 
-                df_closings['Net_Profit'] = df_closings['Gross_Change'] - df_closings['Capital_Injection']
+                # Net Profit = Gross Change - Capital Injection + Withdrawal
+                # (Gross Change = Total - Prev Total. Withdrawal reduces Total. So we add it back to neutralize.)
+                df_closings['Net_Profit'] = df_closings['Gross_Change'] - df_closings['Capital_Injection'] + df_closings['Withdrawal']
                 
                 # Filter out the 'prev_month' row from display, only show target range
                 df_result = df_closings[df_closings['month'] >= start_str].copy()
@@ -622,7 +636,7 @@ elif page == "一般帳務分析 (General Analysis)":
                     # Logic: Sum of Net_Profit in the period
                     total_profit = df_result['Net_Profit'].sum()
                     
-                    st.metric(f"區間總獲利 ({start_str} ~ {end_str})", f"${total_profit:,.0f}", help="區間期末總資產 - 區間期初總資產 - 業主投入資本")
+                    st.metric(f"區間總獲利 ({start_str} ~ {end_str})", f"${total_profit:,.0f}", help="區間期末總資產 - 區間期初總資產 - 業主投入 + 資金提出")
                     st.divider()
                     
                     # Chart
@@ -634,14 +648,15 @@ elif page == "一般帳務分析 (General Analysis)":
                     
                     # Table
                     st.subheader("詳細數據")
-                    tbl = df_result[['month', 'Prev_Total', 'Total', 'Gross_Change', 'Capital_Injection', 'Net_Profit']].copy()
-                    tbl.columns = ['月份', '期初餘額 (上期末)', '期末總資產', '資產增減', '扣除業主投入', '實際獲利']
+                    tbl = df_result[['month', 'Prev_Total', 'Total', 'Gross_Change', 'Capital_Injection', 'Withdrawal', 'Net_Profit']].copy()
+                    tbl.columns = ['月份', '期初餘額 (上期末)', '期末總資產', '資產增減', '扣除業主投入', '加回資金提出', '實際獲利']
                     
                     st.dataframe(tbl.style.format({
                         '期初餘額 (上期末)': '${:,.0f}', 
                         '期末總資產': '${:,.0f}', 
                         '資產增減': '${:,.0f}',
                         '扣除業主投入': '${:,.0f}',
+                        '加回資金提出': '${:,.0f}',
                         '實際獲利': '${:,.0f}'
                     }).applymap(lambda v: 'color: red;' if v < 0 else 'color: green;', subset=['實際獲利']), use_container_width=True)
                 else:
