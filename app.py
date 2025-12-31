@@ -992,11 +992,11 @@ elif page == "健保營收分析 (NHI Analysis)":
 
             rec = existing_recs.iloc[0]
 
-            def_total = rec['total_fee']
+            def_total = float(rec['total_fee'])
 
-            def_deduction = rec['deduction']
+            def_deduction = float(rec['deduction'])
 
-            def_rejection = rec['rejection']
+            def_rejection = float(rec['rejection'])
 
             def_chronic = int(rec['chronic_count'])
 
@@ -1008,7 +1008,7 @@ elif page == "健保營收分析 (NHI Analysis)":
 
             if 'drug_fee' in rec:
 
-                 def_drug_fee = rec['drug_fee']
+                 def_drug_fee = float(rec['drug_fee'])
 
                  
 
