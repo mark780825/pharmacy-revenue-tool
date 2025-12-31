@@ -700,6 +700,8 @@ elif page == "結帳工具 (Checkout Tool)":
             st.success("✅ 結帳完成！所有帳務已寫入資料庫。")
 
 
+elif page == "一般帳務分析 (General Analysis)":
+
     st.header("一般帳務分析")
 
     # Mode Selection
