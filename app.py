@@ -1050,7 +1050,7 @@ elif page == "健保營收分析 (NHI Analysis)":
 
             st.metric("試算實際點值 (Effective Point Value)", f"{point_value:.4f}", help="1 - (核扣 / 總調劑費)")
 
-            st.metric("預估健保總收入", f"${actual_received:,.0f}", help="調劑費 + 藥費 - 核扣 - 核刪")
+            st.metric("當月健保應收", f"${actual_received:,.0f}", help="總調劑費 (核扣點值前) + 健保藥費 - 核扣 - 核刪")
 
         
 
