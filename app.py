@@ -81,7 +81,7 @@ with st.sidebar:
 
         # Navigation Options based on Role
 
-        options = ["每日 記帳 (Data Entry)"]
+        options = ["每日 記帳 (Data Entry)", "結帳工具 (Checkout Tool)"]
 
         if st.session_state['role'] == 'admin':
 
@@ -375,13 +375,330 @@ if page == "每日 記帳 (Data Entry)":
              else:
                  st.info("請先勾選欲刪除的紀錄")
 
-    else:
 
-        st.write("尚無今日紀錄")
+elif page == "結帳工具 (Checkout Tool)":
+    st.header("門市結帳工具")
+    st.caption("依照早班/晚班流程輸入，系統將自動計算營收並彙整寫入帳本")
 
+    # Date Selection
+    check_date = st.date_input("結帳日期", datetime.now())
 
+    # --- Session State for Temp Items ---
+    if 'co_exp_m' not in st.session_state: st.session_state['co_exp_m'] = []
+    if 'co_inc_m' not in st.session_state: st.session_state['co_inc_m'] = []
+    if 'co_exp_e' not in st.session_state: st.session_state['co_exp_e'] = []
+    if 'co_inc_e' not in st.session_state: st.session_state['co_inc_e'] = []
 
-elif page == "一般帳務分析 (General Analysis)":
+    # --- Helper Functions ---
+    def add_exp(target_list_name, cat, subcat, amt, note):
+        if amt > 0:
+            st.session_state[target_list_name].append({
+                "category": cat,
+                "subcategory": subcat,
+                "amount": amt,
+                "note": note
+            })
+    
+    def add_inc(target_list_name, cat, subcat, amt, note, account):
+        if amt > 0:
+            st.session_state[target_list_name].append({
+                "category": cat,
+                "subcategory": subcat,
+                "amount": amt,
+                "note": note,
+                "account": account
+            })
+
+    def remove_item(target_list_name, idx):
+        st.session_state[target_list_name].pop(idx)
+
+    def render_list(list_name, is_income=False):
+        items = st.session_state[list_name]
+        if items:
+            df = pd.DataFrame(items)
+            # Add simple index for removal
+            for i, row in enumerate(items):
+                col_str = f"{row['category']} - {row['subcategory']} ${row['amount']}"
+                if is_income:
+                   col_str += f" ({row['account']})"
+                
+                c1, c2 = st.columns([0.8, 0.2])
+                c1.text(col_str)
+                if c2.button("刪除", key=f"del_{list_name}_{i}"):
+                    remove_item(list_name, i)
+                    st.rerun()
+            return sum(item['amount'] for item in items)
+        return 0
+
+    st.divider()
+
+    # --- Step 1: Morning Shift (早班) ---
+    st.subheader("☀️ 早班 (下午結帳)")
+    
+    c_m1, c_m2, c_m3 = st.columns(3)
+    with c_m1:
+        hold_A = st.number_input("承 (A) - 昨日交接金", value=26850, step=100, help="預設 26850")
+    with c_m2:
+        handover_B = st.number_input("交 (B) - 早班實點金額", min_value=0, step=100)
+
+    with st.expander("早班 - 支出明細 (C)", expanded=True):
+        # Input Form
+        ec1, ec2, ec3 = st.columns([2, 2, 1])
+        with ec1:
+            e_main = st.selectbox("主科目", [k for k in utils.EXPENSE_CATEGORIES.keys() if k != "帳戶類別"], key="m_e_main")
+        with ec2:
+            e_sub = st.selectbox("子類別", utils.EXPENSE_CATEGORIES.get(e_main, []), key="m_e_sub")
+        with ec3:
+            e_amt = st.number_input("金額", min_value=0, key="m_e_amt")
+            e_note = st.text_input("備註", key="m_e_note")
+        
+        if st.button("加入早班支出", key="add_m_exp"):
+            add_exp('co_exp_m', e_main, e_sub, e_amt, e_note)
+            st.rerun()
+
+        # List
+        total_exp_m = render_list('co_exp_m')
+        st.caption(f"早班支出總計: ${total_exp_m}")
+
+    with st.expander("早班 - 非現金收入 (LinePay/刷卡/銀行)", expanded=False):
+        ic1, ic2, ic3 = st.columns([2, 2, 1])
+        with ic1:
+            # Only Non-Cash Categories? User said "Non-Cash Income"
+            # Usually '銷貨收入' -> 'Line Pay', 'Credit Card', 'Bank'
+            i_main = "銷貨收入"
+            # Filter utility keys for relevant ones
+            non_cash_subs = ["Line Pay收入", "信用卡收入", "銀行收入"]
+            i_sub = st.selectbox("項目", non_cash_subs, key="m_i_sub")
+        with ic2:
+            # Account mapping? User said "Account... same as Daily Record".
+            # For Non-Cash, Account is usually "銀行" or "現金"? 
+            # Actually LinePay/CreditCard usually go to Bank?
+            # User image shows "非現金收入".
+            # Let's let them choose Account, default to Bank for non-cash.
+            i_acc = st.selectbox("入帳帳戶", ["銀行", "現金"], index=0, key="m_i_acc")
+        with ic3:
+            i_amt = st.number_input("金額", min_value=0, key="m_i_amt")
+            i_note = st.text_input("備註", key="m_i_note")
+            
+        if st.button("加入早班收入", key="add_m_inc"):
+            add_inc('co_inc_m', i_main, i_sub, i_amt, i_note, i_acc)
+            st.rerun()
+            
+        total_inc_nano_m = render_list('co_inc_m', is_income=True)
+        st.caption(f"早班非現金收入總計: ${total_inc_nano_m}")
+
+    # Calculate Morning Revenue (Ref: B + C + NonCash - A)
+    # Revenue D = (Handover B + Expense C + NonCash) - Hold A
+    # Wait, B is Cash Handover.
+    # Revenue = (New Cash B - Old Cash A) + Expenses C + NonCash
+    # formula image: B+C-A = D (This assumes D is TOTAL revenue? Or Cash Revenue?)
+    # Image says: "非現金收入(C)" ... wait image labels are reused.
+    # Image 1: Morning: "交+支-承=營 (B+C-A=D)"
+    # Image 2: Morning Non-Cash is separate column?
+    # Let's follow Image 2 Formula: "交(B) + 支(D) + 非現金(C) - 承(A) = 營(E)"
+    # Note labels in app: B=Handover(Cash), C=TotalExp, NonCash=TotalNonCash
+    revenue_m = (handover_B + total_exp_m + total_inc_nano_m) - hold_A
+    st.info(f"早班推算營收: ${revenue_m:,.0f} (公式: 交{handover_B} + 支{total_exp_m} + 非現金{total_inc_nano_m} - 承{hold_A})")
+
+    st.divider()
+
+    # --- Step 2: Evening Shift (晚班) ---
+    st.subheader("🌙 晚班 (晚上結帳)")
+
+    c_e1, c_e2, c_e3 = st.columns(3)
+    with c_e1:
+        st.metric("承 (B) - 早班交接", f"${handover_B}")
+    with c_e2:
+        handover_F = st.number_input("交 (F) - 晚班實點金額", min_value=0, step=100)
+
+    with st.expander("晚班 - 支出明細 (H)", expanded=True):
+        ec1, ec2, ec3 = st.columns([2, 2, 1])
+        with ec1:
+            e_main2 = st.selectbox("主科目", [k for k in utils.EXPENSE_CATEGORIES.keys() if k != "帳戶類別"], key="e_e_main")
+        with ec2:
+            e_sub2 = st.selectbox("子類別", utils.EXPENSE_CATEGORIES.get(e_main2, []), key="e_e_sub")
+        with ec3:
+            e_amt2 = st.number_input("金額", min_value=0, key="e_e_amt")
+            e_note2 = st.text_input("備註", key="e_e_note")
+        
+        if st.button("加入晚班支出", key="add_e_exp"):
+            add_exp('co_exp_e', e_main2, e_sub2, e_amt2, e_note2)
+            st.rerun()
+
+        total_exp_e = render_list('co_exp_e')
+        st.caption(f"晚班支出總計: ${total_exp_e}")
+
+    with st.expander("晚班 - 非現金收入 (G)", expanded=False):
+        ic1, ic2, ic3 = st.columns([2, 2, 1])
+        with ic1:
+            i_main2 = "銷貨收入"
+            i_sub2 = st.selectbox("項目", non_cash_subs, key="e_i_sub")
+        with ic2:
+            i_acc2 = st.selectbox("入帳帳戶", ["銀行", "現金"], index=0, key="e_i_acc")
+        with ic3:
+            i_amt2 = st.number_input("金額", min_value=0, key="e_i_amt")
+            i_note2 = st.text_input("備註", key="e_i_note")
+            
+        if st.button("加入晚班收入", key="add_e_inc"):
+            add_inc('co_inc_e', i_main2, i_sub2, i_amt2, i_note2, i_acc2)
+            st.rerun()
+            
+        total_inc_nano_e = render_list('co_inc_e', is_income=True)
+        st.caption(f"晚班非現金收入總計: ${total_inc_nano_e}")
+
+    # Revenue I = (Handover F + Expense H + NonCash G) - Handover B
+    revenue_e = (handover_F + total_exp_e + total_inc_nano_e) - handover_B
+    st.info(f"晚班推算營收: ${revenue_e:,.0f} (公式: 交{handover_F} + 支{total_exp_e} + 非現金{total_inc_nano_e} - 承{handover_B})")
+
+    st.divider()
+
+    # --- Step 3: Daily Settlement (日結) ---
+    st.subheader("🏁 日結算 (End of Day)")
+    
+    # Total Calculation
+    # Formula Image 2:
+    # J (Next Day Hold, Default 26850)
+    # K (Withdrawal/Refill) = F - J
+    # Total Exp M = D+H
+    # Total Rev N = J + L + M + K - A
+    # Wait, J+K = F. So F + L + M - A.
+    # L = Total Non-Cash (C+G)
+    # M = Total Exp (D+H)
+    # A = Start Hold
+    
+    hold_J = st.number_input("明日備用金 (J)", value=26850, step=100)
+    
+    withdrawal_K = handover_F - hold_J
+    
+    total_non_cash_L = total_inc_nano_m + total_inc_nano_e
+    total_exp_M = total_exp_m + total_exp_e
+    
+    total_daily_revenue_N = (hold_J + withdrawal_K + total_non_cash_L + total_exp_M) - hold_A
+    
+    # Validation
+    # Cash Income (Implied) = (Handover F - Start A) + Total Exp + Withdrawal?
+    # Actually Cash Revenue = (F - A) + Total Exp.  (Assuming non-cash didn't touch cash drawer)
+    # Wait, if withdrawal K exists, it came out of F? 
+    # Logic: F is "Actual Count BEFORE Withdrawal"?
+    # Image 2 says: "交給隔天的金額(J)...額外的錢提出(K)...交(F)" is not explicitly linked but implied J+K = F?
+    # Or is F the count result, and we split F into J and K?
+    # Yes, "若餘額不足...內提".
+    # So F is the physical cash present. We split it into J (keep) and K (take out).
+    
+    c_f1, c_f2 = st.columns(2)
+    with c_f1:
+        if withdrawal_K > 0:
+             st.success(f"💰 應提出金額 (K): ${withdrawal_K:,.0f}")
+        elif withdrawal_K < 0:
+             st.error(f"⚠️ 應內提補足 (K): ${abs(withdrawal_K):,.0f}")
+        else:
+             st.info("金額剛好，無須提領或補足。")
+             
+    with c_f2:
+        st.metric("當日總營收 (N)", f"${total_daily_revenue_N:,.0f}", help=f"公式: 交{handover_F} + 非現金{total_non_cash_L} + 總支出{total_exp_M} - 期初{hold_A}")
+
+    if st.button("確認結帳並寫入每日帳務 (Confirm & Save)", type="primary"):
+        if total_daily_revenue_N != (revenue_m + revenue_e):
+            st.warning(f"⚠️ 警告：早晚班營收加總 ({revenue_m + revenue_e}) 與日結總營收 ({total_daily_revenue_N}) 不符，請檢查輸入數據。")
+        else:
+            # 1. Aggregate Expenses
+            all_expenses = st.session_state['co_exp_m'] + st.session_state['co_exp_e']
+            # Group by (Category, Subcategory)
+            exp_groups = {}
+            for x in all_expenses:
+                key = (x['category'], x['subcategory'])
+                if key not in exp_groups:
+                    exp_groups[key] = {'amount': 0, 'notes': []}
+                exp_groups[key]['amount'] += x['amount']
+                if x['note']: exp_groups[key]['notes'].append(x['note'])
+            
+            # Write Expenses
+            for (cat, sub), data in exp_groups.items():
+                final_note = " | ".join(data['notes'])
+                # Suffix to note to indicate source
+                final_note = f"[結帳] {final_note}"
+                db.add_transaction(
+                    date=check_date,
+                    type="支出",
+                    category=cat,
+                    subcategory=sub,
+                    account="現金", # Expenses paid from Cash Drawer
+                    amount=data['amount'],
+                    original_amount=None,
+                    note=final_note,
+                    nhi_month=""
+                )
+            
+            # 2. Aggregate Non-Cash Income
+            all_income = st.session_state['co_inc_m'] + st.session_state['co_inc_e']
+            # Group by (Category, Subcategory, Account)
+            inc_groups = {}
+            for x in all_income:
+                key = (x['category'], x['subcategory'], x['account'])
+                if key not in inc_groups:
+                    inc_groups[key] = {'amount': 0, 'notes': []}
+                inc_groups[key]['amount'] += x['amount']
+                if x['note']: inc_groups[key]['notes'].append(x['note'])
+
+            # Write Non-Cash Income
+            for (cat, sub, acc), data in inc_groups.items():
+                final_note = " | ".join(data['notes'])
+                final_note = f"[結帳] {final_note}"
+                # Calculate net? The add_transaction or calculate_net_amount logic usually handles checking rates.
+                # But here we are bulk adding. 
+                # Should we apply rate? Yes.
+                # calculate_net_amount(cat, sub, amount) -> (net, adjusted)
+                # But we are calling db.add_transaction directly.
+                # We should replicate the logic or call helper.
+                # Reuse util logic?
+                net_amt, _ = utils.calculate_net_amount(cat, sub, data['amount'])
+                
+                db.add_transaction(
+                    date=check_date,
+                    type="收入",
+                    category=cat,
+                    subcategory=sub,
+                    account=acc,
+                    amount=net_amt,
+                    original_amount=data['amount'] if net_amt != data['amount'] else None,
+                    note=final_note,
+                    nhi_month=""
+                )
+
+            # 3. Calculate and Write "Cash Sales Income"
+            # Cash Revenue = Total Daily Revenue - Total Non-Cash (L)
+            # Or derived from Cash Flow: (F - A) + Total Exp - (Inner Refill if any? No, F is final cash).
+            # Let's stick to: Cash Sales = Total Revenue N - NonCash L
+            # Wait, N = F + L + M - A
+            # Cash Sales = (F + L + M - A) - L = F + M - A.
+            # F (Night Handover) + M (Expenses Paid) - A (Start Hold)
+            cash_sales = handover_F + total_exp_M - hold_A
+            
+            if cash_sales > 0:
+                db.add_transaction(
+                    date=check_date,
+                    type="收入",
+                    category="銷貨收入",
+                    subcategory="現金收入",
+                    account="現金",
+                    amount=cash_sales,
+                    original_amount=None,
+                    note="[結帳] 當日現金營收",
+                    nhi_month=""
+                )
+            elif cash_sales < 0:
+                # Negative Revenue? Possible if errors or huge refund?
+                st.error(f"計算出現金營收為負數 (${cash_sales})，請檢查交接金額是否正確。")
+                st.stop()
+            
+            # 4. Clear State
+            st.session_state['co_exp_m'] = []
+            st.session_state['co_inc_m'] = []
+            st.session_state['co_exp_e'] = []
+            st.session_state['co_inc_e'] = []
+            
+            st.success("✅ 結帳完成！所有帳務已寫入資料庫。")
+
 
     st.header("一般帳務分析")
 
