@@ -146,6 +146,9 @@ if page == "每日 記帳 (Data Entry)":
     st.header("每日收支紀錄")
     
     if st.session_state.get('tx_success'):
+        # Reset inputs here before widgets are rendered
+        st.session_state['input_amount'] = 0
+        st.session_state['input_note'] = ""
         st.success("✅ 紀錄已新增")
         st.session_state['tx_success'] = False
 
@@ -326,8 +329,8 @@ if page == "每日 記帳 (Data Entry)":
                 )
 
             # Clear inputs and show success
-            st.session_state['input_amount'] = 0
-            st.session_state['input_note'] = ""
+            # st.session_state['input_amount'] = 0  <-- Removed, moved to top
+            # st.session_state['input_note'] = ""   <-- Removed, moved to top
             st.session_state['tx_success'] = True
             st.rerun()
 
