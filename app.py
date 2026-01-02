@@ -192,10 +192,7 @@ if page == "每日 記帳 (Data Entry)":
              
         else:
             # Normal Income/Expense Account Selection
-            if st.session_state['role'] != 'admin':
-                # Non-admin users can only select Cash
-                account_options = ["現金"]
-                
+
             account = st.selectbox("帳戶", account_options)
 
         amount = st.number_input("金額 (TWD)", min_value=0, step=1)
@@ -1303,20 +1300,23 @@ elif page == "健保營收分析 (NHI Analysis)":
                     
 
                 df_merge['差異'] = df_merge['實際入帳'] - df_merge['actual_received']
+                df_merge['real_dispensing_fee'] = df_merge['total_fee'] - df_merge['deduction']
 
                 
 
                 # Display Comparison Table
 
-                comp_display = df_merge[['month', 'total_fee', 'drug_fee', 'deduction', 'rejection', 'actual_received', '實際入帳', '差異']].copy()
+                comp_display = df_merge[['month', 'total_fee', 'real_dispensing_fee', 'drug_fee', 'deduction', 'rejection', 'actual_received', '實際入帳', '差異']].copy()
 
-                comp_display.columns = ['月份', '申報調劑費', '藥費', '點值核扣', '核刪', '應收總額(預估)', '實際入帳', '差異']
+                comp_display.columns = ['月份', '申報調劑費', '實領調劑費', '藥費', '點值核扣', '核刪', '當月健保應收', '實際入帳', '差異']
 
                 
 
                 st.dataframe(comp_display.style.format({
 
                     '申報調劑費': '${:,.0f}',
+                    
+                    '實領調劑費': '${:,.0f}',
 
                     '藥費': '${:,.0f}',
 
@@ -1324,7 +1324,7 @@ elif page == "健保營收分析 (NHI Analysis)":
 
                     '核刪': '${:,.0f}',
 
-                    '應收總額(預估)': '${:,.0f}',
+                    '當月健保應收': '${:,.0f}',
 
                     '實際入帳': '${:,.0f}',
 
