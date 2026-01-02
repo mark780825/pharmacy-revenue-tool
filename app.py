@@ -155,20 +155,36 @@ if page == "每日 記帳 (Data Entry)":
 
     with col1:
         date = st.date_input("日期", datetime.now())
-        tx_type = st.radio("類型", ["收入", "支出", "資金調度"], horizontal=True)
+        
+        # Callback for smart defaults
+        def apply_smart_defaults():
+            t = st.session_state.get('tx_type_radio')
+            if t == '收入':
+                m = st.session_state.get('inc_main')
+                s = st.session_state.get('inc_sub')
+                if m == '健保收入': 
+                    st.session_state['tx_account'] = '銀行'
+                elif s in ['Line Pay收入', '信用卡收入', '銀行收入']: 
+                    st.session_state['tx_account'] = '銀行'
+            elif t == '支出':
+                m = st.session_state.get('exp_main')
+                if m == '家庭支出': 
+                    st.session_state['tx_account'] = '現金'
+        
+        tx_type = st.radio("類型", ["收入", "支出", "資金調度"], horizontal=True, key="tx_type_radio", on_change=apply_smart_defaults)
         
         if tx_type == "收入":
-            main_cat = st.selectbox("主類別", list(utils.INCOME_CATEGORIES.keys()))
+            main_cat = st.selectbox("主類別", list(utils.INCOME_CATEGORIES.keys()), key="inc_main", on_change=apply_smart_defaults)
             sub_cat_options = list(utils.INCOME_CATEGORIES[main_cat].keys())
-            sub_cat = st.selectbox("子類別", sub_cat_options)
+            sub_cat = st.selectbox("子類別", sub_cat_options, key="inc_sub", on_change=apply_smart_defaults)
             account_from = None
         elif tx_type == "支出":
             # Expense
             expense_cats = [k for k in utils.EXPENSE_CATEGORIES.keys() if k != "帳戶類別"]
-            main_cat = st.selectbox("主科目", expense_cats)
+            main_cat = st.selectbox("主科目", expense_cats, key="exp_main", on_change=apply_smart_defaults)
             sub_cat_options = utils.EXPENSE_CATEGORIES.get(main_cat, [])
             if sub_cat_options:
-                sub_cat = st.selectbox("子類別", sub_cat_options)
+                sub_cat = st.selectbox("子類別", sub_cat_options, key="exp_sub", on_change=apply_smart_defaults)
             else:
                 sub_cat = None
             account_from = None
@@ -195,7 +211,7 @@ if page == "每日 記帳 (Data Entry)":
         else:
             # Normal Income/Expense Account Selection
 
-            account = st.selectbox("帳戶", account_options)
+            account = st.selectbox("帳戶", account_options, key="tx_account")
 
         amount = st.number_input("金額 (TWD)", min_value=0, step=1, key="input_amount")
         note = st.text_input("備註", key="input_note")
