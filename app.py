@@ -144,8 +144,10 @@ if not st.session_state['logged_in']:
 if page == "每日 記帳 (Data Entry)":
 
     st.header("每日收支紀錄")
-
     
+    if st.session_state.get('tx_success'):
+        st.success("✅ 紀錄已新增")
+        st.session_state['tx_success'] = False
 
     col1, col2 = st.columns(2)
 
@@ -195,8 +197,8 @@ if page == "每日 記帳 (Data Entry)":
 
             account = st.selectbox("帳戶", account_options)
 
-        amount = st.number_input("金額 (TWD)", min_value=0, step=1)
-        note = st.text_input("備註")
+        amount = st.number_input("金額 (TWD)", min_value=0, step=1, key="input_amount")
+        note = st.text_input("備註", key="input_note")
 
 
 
@@ -307,7 +309,11 @@ if page == "每日 記帳 (Data Entry)":
                     nhi_month=nhi_selected_month_str
                 )
 
-            st.success("紀錄已新增")
+            # Clear inputs and show success
+            st.session_state['input_amount'] = 0
+            st.session_state['input_note'] = ""
+            st.session_state['tx_success'] = True
+            st.rerun()
 
         else:
 
