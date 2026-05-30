@@ -1,0 +1,15 @@
+[Unit]
+Description=Pharmacy Revenue Tool (Streamlit)
+After=network.target
+
+[Service]
+Type=simple
+User=nhdev
+WorkingDirectory=/opt/pharmacy
+Environment="PATH=/opt/pharmacy/venv/bin"
+ExecStart=/opt/pharmacy/venv/bin/streamlit run app.py --server.port=8501 --server.address=127.0.0.1 --server.headless=true --browser.gatherUsageStats=false
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
